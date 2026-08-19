@@ -81,4 +81,5 @@ class GraphState(TypedDict):
     agent_failure: Optional[str]
     is_queued: Optional[bool]
     substitution_info: Optional[Dict[str, Any]]
+    llm_reasoning: Optional[Dict[str, Any]]
     logs: Annotated[List[AgentLog], operator.add]

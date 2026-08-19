@@ -183,82 +183,100 @@ async def run_agents(event: DelayEvent):
         "notifications": []
     }
     
-    # We will iterate through the graph and broadcast state updates
-    async for output in graph_app.astream(initial_state):
-        for node_name, state_update in output.items():
-            if state_update.get("is_queued"):
-                await manager.broadcast(json.dumps({
-                    "type": "agent_alert",
-                    "data": {
-                        "agent": "rescheduler",
-                        "status": "crashed",
-                        "message": "Rescheduler unavailable — action queued"
-                    }
-                }))
-
-            if "logs" in state_update:
-                for log in state_update["logs"]:
+    try:
+        # We will iterate through the graph and broadcast state updates
+        async for output in graph_app.astream(initial_state):
+            for node_name, state_update in output.items():
+                if state_update.get("is_queued"):
                     await manager.broadcast(json.dumps({
-                        "type": "log",
-                        "data": log.dict()
+                        "type": "agent_alert",
+                        "data": {
+                            "agent": "rescheduler",
+                            "status": "crashed",
+                            "message": "Rescheduler unavailable — action queued"
+                        }
+                    }))
+
+                if "logs" in state_update:
+                    for log in state_update["logs"]:
+                        await manager.broadcast(json.dumps({
+                            "type": "log",
+                            "data": log.dict()
+                        }))
+                
+                # If there's a reschedule plan, broadcast it
+                if "reschedule_plan" in state_update:
+                    await manager.broadcast(json.dumps({
+                        "type": "reschedule_plan",
+                        "data": state_update["reschedule_plan"]
+                    }))
+
+                if "severity" in state_update:
+                    await manager.broadcast(json.dumps({
+                        "type": "severity",
+                        "data": state_update["severity"]
+                    }))
+                    
+                if "announcements" in state_update:
+                    serialized_anns = [ann.dict() if hasattr(ann, 'dict') else ann for ann in state_update["announcements"]]
+                    # Add to our local audit logs
+                    ANNOUNCEMENTS_LOG.extend(serialized_anns)
+                    save_announcements()
+                    
+                    await manager.broadcast(json.dumps({
+                        "type": "announcements",
+                        "data": serialized_anns
+                    }))
+                    
+                if "incident_explanation" in state_update:
+                    await manager.broadcast(json.dumps({
+                        "type": "incident_explanation",
+                        "data": state_update["incident_explanation"]
+                    }))
+                    
+                # If report is ready
+                if "incident_report" in state_update:
+                     await manager.broadcast(json.dumps({
+                        "type": "report",
+                        "data": state_update["incident_report"]
+                    }))
+                     
+                if "comparison_data" in state_update:
+                    await manager.broadcast(json.dumps({
+                        "type": "comparison",
+                        "data": state_update["comparison_data"]
+                    }))
+                    
+                if "cost_breakdown" in state_update:
+                    await manager.broadcast(json.dumps({
+                        "type": "cost_breakdown",
+                        "data": state_update["cost_breakdown"]
+                    }))
+                    
+                if "substitution_info" in state_update:
+                    await manager.broadcast(json.dumps({
+                        "type": "substitution",
+                        "data": state_update["substitution_info"]
                     }))
             
-            # If there's a reschedule plan, broadcast it
-            if "reschedule_plan" in state_update:
-                await manager.broadcast(json.dumps({
-                    "type": "reschedule_plan",
-                    "data": state_update["reschedule_plan"]
-                }))
-
-            if "severity" in state_update:
-                await manager.broadcast(json.dumps({
-                    "type": "severity",
-                    "data": state_update["severity"]
-                }))
-                
-            if "announcements" in state_update:
-                serialized_anns = [ann.dict() if hasattr(ann, 'dict') else ann for ann in state_update["announcements"]]
-                # Add to our local audit logs
-                ANNOUNCEMENTS_LOG.extend(serialized_anns)
-                save_announcements()
-                
-                await manager.broadcast(json.dumps({
-                    "type": "announcements",
-                    "data": serialized_anns
-                }))
-                
-            if "incident_explanation" in state_update:
-                await manager.broadcast(json.dumps({
-                    "type": "incident_explanation",
-                    "data": state_update["incident_explanation"]
-                }))
-                
-            # If report is ready
-            if "incident_report" in state_update:
-                 await manager.broadcast(json.dumps({
-                    "type": "report",
-                    "data": state_update["incident_report"]
-                }))
-                 
-            if "comparison_data" in state_update:
-                await manager.broadcast(json.dumps({
-                    "type": "comparison",
-                    "data": state_update["comparison_data"]
-                }))
-                
-            if "cost_breakdown" in state_update:
-                await manager.broadcast(json.dumps({
-                    "type": "cost_breakdown",
-                    "data": state_update["cost_breakdown"]
-                }))
-                
-            if "substitution_info" in state_update:
-                await manager.broadcast(json.dumps({
-                    "type": "substitution",
-                    "data": state_update["substitution_info"]
-                }))
-        
-        await asyncio.sleep(0.5) # Slight pause to make the UI look like agents are "thinking"
+            await asyncio.sleep(0.5) # Slight pause to make the UI look like agents are "thinking"
+    except Exception as e:
+        # Broadcast the error alert to the frontend so it fails loudly in the browser
+        await manager.broadcast(json.dumps({
+            "type": "agent_alert",
+            "data": {
+                "agent": "Orchestrator",
+                "status": "crashed",
+                "message": f"CRITICAL ERROR: {str(e)}"
+            }
+        }))
+        # Broadcast failure report to reset the UI processing/loading state
+        await manager.broadcast(json.dumps({
+            "type": "report",
+            "data": f"CRITICAL ERROR: {str(e)}\n\nPlease ensure your local Ollama server is running (e.g. `ollama run llama3`) to allow LLM reasoning steps to complete."
+        }))
+        # Re-raise the exception so it crashes the task and prints trace in uvicorn console
+        raise e
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
