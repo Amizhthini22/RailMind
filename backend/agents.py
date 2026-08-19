@@ -114,6 +114,7 @@ def verify_audit_chain() -> AuditChainVerification:
 
 # Simulated Policy Model Reference (Illustrative, Demo Parameters)
 SIMULATED_POLICY_CITATION = "Simulated Policy Model (Illustrative Delay Tiers & Operational Penalties)"
+IRCTC_CITATION = "IRCTC Ticket Deposit Receipt (TDR) Refund Schedule (Rule 4: Train Delayed >3 Hours Full Refund) & Railway Board Gazette (2024)"
 
 AVERAGE_FARE_MAP = {
     "Vande Bharat Express": 1750,
