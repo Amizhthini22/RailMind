@@ -4,7 +4,7 @@ import { useMultiLanguageTTS } from '../hooks/useMultiLanguageTTS';
 import { parseMultilingualCommand } from '../services/voiceCommandsMultilang';
 import { getResponse } from '../services/responses';
 
-export const MultiLanguageVoiceControl = ({ onCommand, showToast }) => {
+export const MultiLanguageVoiceControl = ({ onCommand, showToast, substitutionInfo }) => {
   const {
     isListening,
     transcript,
@@ -34,6 +34,16 @@ export const MultiLanguageVoiceControl = ({ onCommand, showToast }) => {
         // Map param time to new_time if present, to align with responses/app expectations
         if (result.params && result.params.time && !result.params.new_time) {
           result.params.new_time = result.params.time;
+        }
+
+        if (result.action === 'show_substitution' && substitutionInfo) {
+          result.params = {
+            ...result.params,
+            train_name: substitutionInfo.original_train_name,
+            standby_name: `${substitutionInfo.standby_train_name} (${substitutionInfo.standby_train_number})`,
+            delay: '45',
+            station: substitutionInfo.substitution_station
+          };
         }
         
         onCommand({ ...result });

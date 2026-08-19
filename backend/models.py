@@ -21,12 +21,27 @@ class DelayEvent(BaseModel):
     station_code: str
     delay_minutes: int
     reason: str
+    substitute_train: bool = False
+    standby_train_id: Optional[str] = None
 
 class AgentLog(BaseModel):
+    index: int = 0
     agent: str
     timestamp: str
     message: str
     details: Optional[Dict[str, Any]] = None
+    previous_hash: str = "0" * 64
+    hash: str = ""
+
+class AuditChainVerification(BaseModel):
+    is_valid: bool
+    total_records: int
+    chain_length: int
+    broken_at_index: Optional[int] = None
+    first_hash: Optional[str] = None
+    latest_hash: Optional[str] = None
+    verified_at: str
+    status_message: str
 
 class Announcement(BaseModel):
     train_id: str
@@ -59,4 +74,11 @@ class GraphState(TypedDict):
     severity: str # "Critical", "Major", "Minor"
     announcements: List[Announcement]
     incident_explanation: Optional[str]
+    contention_records: List[Dict[str, Any]]
+    comparison_data: Optional[Dict[str, Any]]
+    cost_breakdown: Optional[Dict[str, Any]]
+    cost_citation: Optional[str]
+    agent_failure: Optional[str]
+    is_queued: Optional[bool]
+    substitution_info: Optional[Dict[str, Any]]
     logs: Annotated[List[AgentLog], operator.add]

@@ -5,11 +5,16 @@ from pydantic import BaseModel
 from typing import Dict, Any, List
 import json
 
-from models import DelayEvent, Train, Station
-from mock_data import TRAINS, STATIONS
-from agents import app as graph_app
+from models import DelayEvent, Train, Station, AuditChainVerification
+from mock_data import TRAINS, STATIONS, STANDBY_TRAINS
+from agents import app as graph_app, AGENT_HEALTH, PENDING_ACTION_QUEUE, verify_audit_chain, AUDIT_LOG_CHAIN
 
 app = FastAPI(title="RailMind MVP API")
+
+@app.get("/api/verify-audit-chain")
+async def get_verify_audit_chain():
+    verification = verify_audit_chain()
+    return verification.dict()
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,7 +74,8 @@ load_announcements()
 async def get_initial_state():
     return {
         "trains": [t.dict() for t in TRAINS],
-        "stations": [s.dict() for s in STATIONS]
+        "stations": [s.dict() for s in STATIONS],
+        "standby_trains": [t.dict() for t in STANDBY_TRAINS]
     }
 
 @app.get("/api/announcements")
@@ -99,6 +105,71 @@ async def generate_announcement(event: DelayEvent):
         "announcements": announcements
     }
 
+class AgentFailureRequest(BaseModel):
+    agent: str = "rescheduler"
+
+@app.get("/api/agent-health")
+async def get_agent_health():
+    return {
+        "health": AGENT_HEALTH,
+        "pending_queue_count": len(PENDING_ACTION_QUEUE)
+    }
+
+@app.post("/api/fail-agent")
+async def fail_agent(req: AgentFailureRequest):
+    agent_name = req.agent
+    AGENT_HEALTH[agent_name] = "crashed"
+    await manager.broadcast(json.dumps({
+        "type": "agent_alert",
+        "data": {
+            "agent": agent_name,
+            "status": "crashed",
+            "message": f"{agent_name.capitalize()} unavailable — action queued"
+        }
+    }))
+    # Launch auto self-healing watchdog (auto-restarts in 10s)
+    asyncio.create_task(auto_heal_watchdog(agent_name, 10))
+    return {"status": f"Agent {agent_name} process killed. Self-healing watchdog active."}
+
+@app.post("/api/heal-agent")
+async def heal_agent(req: AgentFailureRequest):
+    agent_name = req.agent
+    AGENT_HEALTH[agent_name] = "healthy"
+    await manager.broadcast(json.dumps({
+        "type": "agent_alert",
+        "data": {
+            "agent": agent_name,
+            "status": "recovered",
+            "message": f"{agent_name.capitalize()} restored — queued action resumed"
+        }
+    }))
+    await drain_pending_queue()
+    return {"status": f"Agent {agent_name} restored."}
+
+async def auto_heal_watchdog(agent_name: str, delay_seconds: int = 10):
+    await asyncio.sleep(delay_seconds)
+    if AGENT_HEALTH.get(agent_name) == "crashed":
+        AGENT_HEALTH[agent_name] = "healthy"
+        await manager.broadcast(json.dumps({
+            "type": "agent_alert",
+            "data": {
+                "agent": agent_name,
+                "status": "recovered",
+                "message": f"{agent_name.capitalize()} auto-recovered by watchdog — queued action processed"
+            }
+        }))
+        await drain_pending_queue()
+
+async def drain_pending_queue():
+    if not PENDING_ACTION_QUEUE:
+        return
+    queued_states = list(PENDING_ACTION_QUEUE)
+    PENDING_ACTION_QUEUE.clear()
+    for state in queued_states:
+        event = state.get("delay_event")
+        if event:
+            await run_agents(event)
+
 @app.post("/api/inject-delay")
 async def inject_delay(event: DelayEvent, background_tasks: BackgroundTasks):
     background_tasks.add_task(run_agents, event)
@@ -115,6 +186,16 @@ async def run_agents(event: DelayEvent):
     # We will iterate through the graph and broadcast state updates
     async for output in graph_app.astream(initial_state):
         for node_name, state_update in output.items():
+            if state_update.get("is_queued"):
+                await manager.broadcast(json.dumps({
+                    "type": "agent_alert",
+                    "data": {
+                        "agent": "rescheduler",
+                        "status": "crashed",
+                        "message": "Rescheduler unavailable — action queued"
+                    }
+                }))
+
             if "logs" in state_update:
                 for log in state_update["logs"]:
                     await manager.broadcast(json.dumps({
@@ -157,6 +238,24 @@ async def run_agents(event: DelayEvent):
                  await manager.broadcast(json.dumps({
                     "type": "report",
                     "data": state_update["incident_report"]
+                }))
+                 
+            if "comparison_data" in state_update:
+                await manager.broadcast(json.dumps({
+                    "type": "comparison",
+                    "data": state_update["comparison_data"]
+                }))
+                
+            if "cost_breakdown" in state_update:
+                await manager.broadcast(json.dumps({
+                    "type": "cost_breakdown",
+                    "data": state_update["cost_breakdown"]
+                }))
+                
+            if "substitution_info" in state_update:
+                await manager.broadcast(json.dumps({
+                    "type": "substitution",
+                    "data": state_update["substitution_info"]
                 }))
         
         await asyncio.sleep(0.5) # Slight pause to make the UI look like agents are "thinking"

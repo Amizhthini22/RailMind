@@ -53,3 +53,48 @@ TRAINS = [
 ]
 
 TRAIN_MAP = {t.id: t for t in TRAINS}
+
+STANDBY_TRAINS = [
+    Train(
+        id="t_standby_cnb",
+        name="Relief Special Rake (CNB)",
+        number="02401",
+        route=["CNB", "PRYJ", "BSB", "PNBE", "HWH"],
+        schedule={
+            "CNB": "21:35",
+            "PRYJ": "23:45",
+            "BSB": "01:15",
+            "PNBE": "04:05",
+            "HWH": "10:00"
+        },
+        current_station="CNB"
+    ),
+    Train(
+        id="t_standby_ndls",
+        name="Clone Vande Bharat Special",
+        number="02244",
+        route=["NDLS", "CNB", "PRYJ", "BSB"],
+        schedule={
+            "NDLS": "06:15",
+            "CNB": "10:15",
+            "PRYJ": "12:15",
+            "BSB": "14:10"
+        },
+        current_station="NDLS"
+    ),
+    Train(
+        id="t_standby_pryj",
+        name="Prayagraj Standby Express",
+        number="02302",
+        route=["PRYJ", "BSB", "PNBE", "HWH"],
+        schedule={
+            "PRYJ": "23:50",
+            "BSB": "01:20",
+            "PNBE": "04:10",
+            "HWH": "10:05"
+        },
+        current_station="PRYJ"
+    )
+]
+
+STANDBY_MAP = {t.id: t for t in STANDBY_TRAINS}
