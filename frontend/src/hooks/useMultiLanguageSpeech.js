@@ -49,7 +49,8 @@ export const useMultiLanguageSpeech = () => {
     };
 
     recognition.onerror = (event) => {
-      if (event.error !== 'no-speech') {
+      // 'aborted' and 'no-speech' are standard browser speech lifecycle events, not system errors
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
         setError(event.error);
       }
       setIsListening(false);

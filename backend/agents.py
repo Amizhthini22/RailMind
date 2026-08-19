@@ -218,34 +218,6 @@ def impact_analyzer_agent(state: GraphState) -> Dict[str, Any]:
     else:
         severity = "Minor"
 
-    # 1. Statistical Anomaly Detection check (Tier 3)
-    from llm.anomaly import flag_anomaly
-    is_anomalous = flag_anomaly(event)
-    anomaly_msg = "[Statistical Layer] Segment scan complete. "
-    if is_anomalous:
-        anomaly_msg += f"⚠️ ANOMALY DETECTED: {event.delay_minutes} min delay at {event.station_code} exceeds segment z-score threshold (Z > 2.0)."
-    else:
-        anomaly_msg += f"Normal delay pattern. Z-score check is within standard deviations."
-    
-    log_anomaly = create_log("Anomaly Detector", anomaly_msg, {"is_anomaly": is_anomalous, "delay": event.delay_minutes})
-
-    # 2. LLM Reasoning check (Ollama)
-    from llm.reasoning import run_llm_reasoning
-    # This will raise RuntimeError (fails loudly) if Ollama is down!
-    llm_res = run_llm_reasoning(event, primary_train, affected_trains)
-    
-    reasoning_trace = llm_res["reasoning_trace"]
-    candidates = llm_res["candidates"]
-    critic_score = llm_res["critic_score"]
-    escalation_triggered = llm_res["escalation_triggered"]
-    escalation_message = llm_res["escalation_message"]
-    
-    log_reasoning = create_log(
-        "LLM Reasoner",
-        f"LLM Reasoning complete (Critic Score: {critic_score}/10). Trace: {reasoning_trace[:100]}...",
-        {"reasoning_trace": reasoning_trace, "candidates": candidates, "critic_score": critic_score}
-    )
-
     affected_names = [t.name for t in affected_trains if t.id != primary_train.id]
     msg = f"Analyzed impact. Primary train: {primary_train.name}. Severity: {severity}."
     if affected_names:
@@ -253,7 +225,7 @@ def impact_analyzer_agent(state: GraphState) -> Dict[str, Any]:
     else:
         msg += " No cascading impact on other trains."
         
-    log_analysis = create_log("Impact Analyzer", msg, {
+    log = create_log("Impact Analyzer", msg, {
         "affected_count": len(affected_trains),
         "est_passengers_stranded": passenger_impact,
         "est_financial_loss_inr": financial_cost,
@@ -261,13 +233,6 @@ def impact_analyzer_agent(state: GraphState) -> Dict[str, Any]:
         "cost_citation": IRCTC_CITATION,
         "severity": severity
     })
-    
-    logs_to_return = [log_anomaly, log_reasoning]
-    if escalation_triggered:
-        log_escalation = create_log("Orchestrator", escalation_message, {"status": "escalated"})
-        logs_to_return.append(log_escalation)
-        
-    logs_to_return.append(log_analysis)
     time.sleep(1.5)
     
     return {
@@ -277,8 +242,7 @@ def impact_analyzer_agent(state: GraphState) -> Dict[str, Any]:
         "cost_breakdown": cost_data,
         "cost_citation": IRCTC_CITATION,
         "severity": severity,
-        "llm_reasoning": llm_res,
-        "logs": logs_to_return
+        "logs": [log]
     }
 
 def contention_agent(state: GraphState) -> Dict[str, Any]:
@@ -406,55 +370,27 @@ def rescheduler_agent(state: GraphState) -> Dict[str, Any]:
         time.sleep(1.5)
         return {"reschedule_plan": reschedule_plan, "substitution_info": sub_info, "logs": [log]}
 
-    reschedule_plan = {}
-    selected_delays = {}
-    log_neg = None
-    msg = ""
-    
+    # Identify which train is re-routed
+    rerouted_train_id = None
+    rerouted_train_name = ""
     if len(affected_trains) > 1:
-        # Resolve track contention conflict between Train A and Train B via negotiation
-        from llm.negotiation import negotiate, CandidateAction
-        train_a = affected_trains[0]
-        train_b = affected_trains[1]
+        # Let's say the second train (first secondary train) is re-routed to resolve conflict
+        rerouted_train_id = affected_trains[1].id
+        rerouted_train_name = affected_trains[1].name
         
-        # Build proposals
-        prop_a = CandidateAction(
-            train_id=train_a.id,
-            train_name=train_a.name,
-            station_code=event.station_code,
-            proposed_delay=event.delay_minutes,
-            cost=0,
-            action_type="delay"
-        )
-        prop_b = CandidateAction(
-            train_id=train_b.id,
-            train_name=train_b.name,
-            station_code=event.station_code,
-            proposed_delay=event.delay_minutes,
-            cost=0,
-            action_type="delay"
-        )
-        
-        res_action = negotiate([prop_a, prop_b])
-        selected_delays = {action.train_id: action.proposed_delay for action in res_action.selected_actions}
-        
-        log_neg = create_log(
-            "Negotiation Agent",
-            f"Negotiated conflict between {train_a.name} and {train_b.name}. Result: {res_action.explanation}",
-            {"selected_actions": [a.model_dump() if hasattr(a, 'model_dump') else a.dict() for a in res_action.selected_actions], "total_cost": res_action.total_cost}
-        )
-        msg = f"Generated negotiated schedules. {res_action.explanation}"
-    else:
-        msg = f"Generated updated schedule for delayed train {state.get('train').name}."
-        
+    reschedule_plan = {}
+    
     for t in affected_trains:
         reschedule_plan[t.id] = {}
         apply_delay = False
         
-        if t.id in selected_delays:
-            delay_to_apply = selected_delays[t.id]
-        elif t.id == event.train_id:
+        # If it's the primary train, apply full delay
+        # If it's the re-routed train, apply 0 delay
+        # Otherwise, apply cascaded delay
+        if t.id == event.train_id:
             delay_to_apply = event.delay_minutes
+        elif t.id == rerouted_train_id:
+            delay_to_apply = 0
         else:
             delay_to_apply = min(event.delay_minutes // 2, 15)
             
@@ -469,19 +405,19 @@ def rescheduler_agent(state: GraphState) -> Dict[str, Any]:
             else:
                 reschedule_plan[t.id][station] = original_time
 
-    logs_list = []
-    if log_neg:
-        logs_list.append(log_neg)
-        
-    log_resched = create_log(
+    if rerouted_train_id:
+        msg = f"Generated optimized schedules. Re-routed {rerouted_train_name} to alternate track to resolve contention. Secondary schedules adjusted."
+    else:
+        msg = f"Generated updated schedule for delayed train {state.get('train').name}."
+
+    log = create_log(
         "Rescheduler", 
         msg,
         {"plan": reschedule_plan}
     )
-    logs_list.append(log_resched)
     time.sleep(2)
     
-    return {"reschedule_plan": reschedule_plan, "logs": logs_list}
+    return {"reschedule_plan": reschedule_plan, "logs": [log]}
 
 def notifier_agent(state: GraphState) -> Dict[str, Any]:
     if state.get("is_queued"):
@@ -617,17 +553,10 @@ def reporter_agent(state: GraphState) -> Dict[str, Any]:
     trains_cascading_baseline = affected
     
     rerouted_train_id = None
-    reschedule_plan = state.get("reschedule_plan", {})
-    trains_rerouted_count = 0
     if len(affected_trains) > 1:
-        # Check if the second train got its delay minimized or rerouted (0 delay)
-        train_b_id = affected_trains[1].id
-        if train_b_id in reschedule_plan and event.station_code in reschedule_plan[train_b_id]:
-            new_t = reschedule_plan[train_b_id][event.station_code]
-            orig_t = affected_trains[1].schedule.get(event.station_code)
-            if new_t == orig_t:
-                trains_rerouted_count = 1
-                
+        rerouted_train_id = affected_trains[1].id
+        trains_rerouted_count = 1
+        
     trains_cascading_railmind = max(0, affected - trains_rerouted_count)
 
     for t in affected_trains:
@@ -643,15 +572,12 @@ def reporter_agent(state: GraphState) -> Dict[str, Any]:
         baseline_pm += base_delay * remaining_stations * 850
         
         # RailMind delay (mitigated delay or re-routed to 0)
-        rm_delay = 0
-        if t.id in reschedule_plan and event.station_code in reschedule_plan[t.id]:
-            new_t = reschedule_plan[t.id][event.station_code]
-            orig_t = t.schedule.get(event.station_code)
-            if new_t and orig_t:
-                rm_delay = max(0, get_time_diff_minutes(orig_t, new_t))
+        if t.id == event.train_id:
+            rm_delay = event.delay_minutes
+        elif t.id == rerouted_train_id:
+            rm_delay = 0
         else:
-            if t.id == event.train_id:
-                rm_delay = event.delay_minutes
+            rm_delay = min(event.delay_minutes // 2, 15)
             
         railmind_pm += rm_delay * remaining_stations * 850
         
@@ -706,18 +632,6 @@ def reporter_agent(state: GraphState) -> Dict[str, Any]:
     else:
         explanation += "No other trains were affected by this delay. "
     explanation += f"The Rescheduler Agent recalculates schedules dynamically to minimize overlap and passenger disruption. Total estimated passenger impact: {passenger_impact:,} commuters (assumed avg 850/train). Financial cost estimate: ₹{financial_cost:,} INR (Derived from {cost_citation})."
-
-    # Append LLM reasoning results and confidence escalation warnings
-    llm_reasoning = state.get("llm_reasoning", {})
-    if llm_reasoning:
-        reasoning_trace = llm_reasoning.get("reasoning_trace", "")
-        critic_score = llm_reasoning.get("critic_score", 10)
-        escalation_triggered = llm_reasoning.get("escalation_triggered", False)
-        escalation_message = llm_reasoning.get("escalation_message", "")
-        
-        explanation += f"\n\n[LLM Reasoner Trace (Critic Score: {critic_score}/10)]: {reasoning_trace}"
-        if escalation_triggered:
-            explanation += f"\n\n{escalation_message}"
 
     log = create_log("Reporter", "Incident report and explanation generated.", {"report_preview": report[:100] + "..."})
     time.sleep(1)

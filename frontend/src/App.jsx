@@ -138,7 +138,7 @@ export default function App() {
       const status = {
         en: voices.some(v => v.lang.toLowerCase().startsWith('en') || v.lang.toLowerCase().includes('en')),
         hi: voices.some(v => v.lang.toLowerCase().startsWith('hi') || v.lang.toLowerCase().includes('hi')),
-        ta: voices.some(v => v.lang.toLowerCase().startsWith('ta') || v.lang.toLowerCase().includes('ta')),
+        ta: voices.some(v => v.lang.toLowerCase().startsWith('ta') || v.lang.toLowerCase().includes('ta') || v.name.toLowerCase().includes('tamil') || v.lang.toLowerCase().includes('in')),
         ja: voices.some(v => v.lang.toLowerCase().startsWith('ja') || v.lang.toLowerCase().includes('ja'))
       };
       setVoicesStatus(status);
@@ -283,15 +283,21 @@ export default function App() {
     }
 
     const item = speechQueueRef.current[speechIndexRef.current];
-    const utterance = new SpeechSynthesisUtterance(item.text);
-    activeUtteranceRef.current = utterance; // Prevent garbage collection!
-
+    if (!item) return;
+    const spokenText = item.text;
     const voices = synth.getVoices();
-    const matchingVoice = voices.find(v => v.lang.startsWith(item.lang) || v.lang.includes(item.lang.split('-')[0]));
+    const matchingVoice = voices.find(v => 
+      v.lang.toLowerCase().startsWith(item.lang.toLowerCase()) || 
+      v.lang.toLowerCase().includes(item.lang.split('-')[0].toLowerCase()) ||
+      v.name.toLowerCase().includes('tamil') ||
+      v.name.toLowerCase().includes('valluvar')
+    );
+
+    const utterance = new SpeechSynthesisUtterance(spokenText);
+    activeUtteranceRef.current = utterance; // Prevent garbage collection!
     if (matchingVoice) {
       utterance.voice = matchingVoice;
     }
-    
     utterance.lang = item.lang;
     utterance.rate = latestSettings.current.speechRate || 1.0;
     utterance.pitch = latestSettings.current.speechPitch || 1.0;
@@ -322,6 +328,9 @@ export default function App() {
       }
     };
 
+    if (synth.paused) {
+      synth.resume();
+    }
     synth.speak(utterance);
 
     // Chrome resume-speaking loop to fix the random pauses
@@ -350,29 +359,30 @@ export default function App() {
       return;
     }
 
-    const voices = synth.getVoices();
-    const hasVoice = (langCode) => voices.some(v => v.lang.toLowerCase().startsWith(langCode) || v.lang.toLowerCase().includes(langCode));
+    if (synth.paused) {
+      synth.resume();
+    }
 
     const items = [];
     newAnnouncements.forEach(announcement => {
       if (latestSettings.current.announcementLang === 'en' || latestSettings.current.announcementLang === 'all') {
-        if (hasVoice('en')) {
-          items.push({ text: announcement.text_en, lang: 'en-IN' });
+        if (announcement.text_en) {
+          items.push({ text: announcement.text_en, lang: 'en-IN', train_name: announcement.train_name });
         }
       }
       if (latestSettings.current.announcementLang === 'hi' || latestSettings.current.announcementLang === 'all') {
-        if (hasVoice('hi')) {
-          items.push({ text: announcement.text_hi, lang: 'hi-IN' });
+        if (announcement.text_hi) {
+          items.push({ text: announcement.text_hi, lang: 'hi-IN', train_name: announcement.train_name });
         }
       }
       if (latestSettings.current.announcementLang === 'ta' || latestSettings.current.announcementLang === 'all') {
-        if (hasVoice('ta')) {
-          items.push({ text: announcement.text_ta, lang: 'ta-IN' });
+        if (announcement.text_ta) {
+          items.push({ text: announcement.text_ta, lang: 'ta-IN', train_name: announcement.train_name });
         }
       }
       if (latestSettings.current.announcementLang === 'ja' || latestSettings.current.announcementLang === 'all') {
-        if (hasVoice('ja')) {
-          items.push({ text: announcement.text_ja || announcement.text_en, lang: 'ja-JP' });
+        if (announcement.text_ja) {
+          items.push({ text: announcement.text_ja, lang: 'ja-JP', train_name: announcement.train_name });
         }
       }
     });
@@ -976,11 +986,11 @@ export default function App() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr) minmax(0, 1fr)', gap: '20px', flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '320px minmax(350px, 1fr) minmax(380px, 1.15fr)', gap: '24px', alignItems: 'start', paddingBottom: '50px' }}>
         
         {/* Control Panel */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 0, overflowY: 'auto' }}>
-          <h2 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <h2 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
             <AlertTriangle size={20} color="var(--error)" /> Inject Delay
           </h2>
           
@@ -1118,10 +1128,16 @@ export default function App() {
         {/* System State & Report */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 0, overflowY: 'auto' }}>
           
-          <div className="glass-panel" style={{ padding: '28px', flex: 1, minHeight: '300px' }}>
-            <h2 style={{ fontSize: '22px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
-              <Clock size={24} color="var(--warning)" /> Updated Schedules
-            </h2>
+          {/* Updated Schedules Panel */}
+          <div className="glass-panel" style={{ padding: '24px', flex: 1, minHeight: '300px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+                <Clock size={22} color="var(--warning)" /> Updated Schedules
+              </h2>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                {Object.keys(reschedulePlan).length > 0 ? `${Object.keys(reschedulePlan).length} Trains Rescheduled` : 'All Trains On Time'}
+              </span>
+            </div>
             
             {substitutionInfo && (
               <div className="glass-panel animate-slide-in" style={{ padding: '14px 18px', marginBottom: '14px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1143,34 +1159,58 @@ export default function App() {
                 <div 
                   key={t.id} 
                   className={`schedule-card ${isAffected ? (currentSeverity === 'Critical' ? 'border-severity-critical' : currentSeverity === 'Major' ? 'border-severity-major' : 'border-severity-minor') : ''}`}
+                  style={{ marginBottom: '14px', padding: '16px' }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                    <span style={{ fontWeight: '600' }}>{t.name}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <div>
+                      <span style={{ fontWeight: '700', fontSize: '15px' }}>{t.name}</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '8px' }}>({t.number})</span>
+                    </div>
                     <span 
                       className={`status-badge ${isAffected ? 'status-delayed' : 'status-ontime'}`}
                       style={isAffected ? {
-                        background: currentSeverity === 'Critical' ? 'var(--error-bg)' : currentSeverity === 'Major' ? 'var(--warning-bg)' : 'var(--success-bg)',
-                        color: currentSeverity === 'Critical' ? 'var(--error)' : currentSeverity === 'Major' ? 'var(--warning)' : 'var(--success)',
-                        borderColor: currentSeverity === 'Critical' ? 'rgba(244, 63, 94, 0.3)' : currentSeverity === 'Major' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'
+                        background: currentSeverity === 'Critical' ? 'var(--error-bg)' : currentSeverity === 'Major' ? 'var(--warning-bg)' : 'rgba(245, 158, 11, 0.15)',
+                        color: currentSeverity === 'Critical' ? 'var(--error)' : 'var(--warning)',
+                        borderColor: currentSeverity === 'Critical' ? 'rgba(244, 63, 94, 0.3)' : 'rgba(245, 158, 11, 0.3)'
                       } : {}}
                     >
-                      {isAffected ? 'Rescheduled' : 'On Time'}
+                      {isAffected ? '⚠️ RESCHEDULED' : '✓ ON TIME'}
                     </span>
                   </div>
                   
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    {t.route.map((st, i) => {
+                  {/* Detailed Station Timetable Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+                    {t.route.map((st) => {
                       const newTime = isAffected ? reschedulePlan[t.id][st] : null;
                       const origTime = t.schedule[st];
                       const timeChanged = newTime && newTime !== origTime;
                       
                       return (
-                        <div key={st} style={{ display: 'flex', alignItems: 'center', fontSize: '13px' }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>{st}</span>
-                          <span style={{ color: timeChanged ? (currentSeverity === 'Critical' ? 'var(--error)' : 'var(--warning)') : 'var(--text-primary)', marginLeft: '4px', fontWeight: timeChanged ? '600' : '400' }}>
-                            {timeChanged ? newTime : origTime}
-                          </span>
-                          {i < t.route.length - 1 && <ChevronRight size={14} color="var(--text-secondary)" style={{ margin: '0 4px' }} />}
+                        <div 
+                          key={st} 
+                          style={{ 
+                            padding: '8px 10px', 
+                            background: timeChanged ? 'rgba(245, 158, 11, 0.12)' : 'rgba(0, 0, 0, 0.25)', 
+                            border: timeChanged ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(255, 255, 255, 0.05)',
+                            borderRadius: '8px'
+                          }}
+                        >
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '600' }}>{st}</div>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginTop: '2px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: '700', color: timeChanged ? 'var(--warning)' : 'var(--text-primary)' }}>
+                              {newTime || origTime}
+                            </span>
+                            {timeChanged && (
+                              <span style={{ fontSize: '10px', color: 'var(--text-muted)', textDecoration: 'line-through' }}>
+                                {origTime}
+                              </span>
+                            )}
+                          </div>
+                          {timeChanged && (
+                            <div style={{ fontSize: '10px', color: 'var(--warning)', marginTop: '2px' }}>
+                              Delayed
+                            </div>
+                          )}
                         </div>
                       );
                     })}

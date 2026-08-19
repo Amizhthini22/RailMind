@@ -416,12 +416,12 @@ select option {
 .main-content {
   flex: 1;
   padding: 30px;
-  max-width: 1400px;
+  max-width: 1550px;
   margin: 0 auto;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
   width: 100%;
 }
 

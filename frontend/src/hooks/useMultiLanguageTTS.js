@@ -17,27 +17,43 @@ export const useMultiLanguageTTS = () => {
       return;
     }
 
+    // Chrome unpause safety check
+    if (synth.paused) {
+      synth.resume();
+    }
+
     const config = VOICE_CONFIGS[language] || VOICE_CONFIGS['en-US'];
     const utterance = new SpeechSynthesisUtterance(text);
     
     utterance.lang = config.lang;
     utterance.rate = config.rate;
     utterance.pitch = config.pitch;
-    utterance.volume = 0.9;
+    utterance.volume = 1.0;
 
-    // Try to find a matching voice
+    // Search for matching language voice (e.g. ta-IN, Google தமிழ், Valluvar)
     const voices = synth.getVoices();
-    const matchingVoice = voices.find(v => v.lang.startsWith(config.lang) || v.lang.includes(config.lang.split('-')[0]));
+    const matchingVoice = voices.find(v => 
+      v.lang.toLowerCase().startsWith(config.lang.toLowerCase()) || 
+      v.lang.toLowerCase().includes(config.lang.split('-')[0].toLowerCase()) ||
+      v.name.toLowerCase().includes(config.lang.toLowerCase()) ||
+      (language === 'ta-IN' && (v.name.toLowerCase().includes('tamil') || v.name.toLowerCase().includes('valluvar')))
+    );
+
     if (matchingVoice) {
       utterance.voice = matchingVoice;
     }
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onerror = (e) => {
+      console.warn("TTS Playback issue:", e);
+      setIsSpeaking(false);
+    };
 
     synth.cancel();
-    synth.speak(utterance);
+    setTimeout(() => {
+      synth.speak(utterance);
+    }, 50);
   }, []);
 
   return { speak, isSpeaking };
