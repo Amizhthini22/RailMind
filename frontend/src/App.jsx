@@ -521,7 +521,6 @@ export default function App() {
     setCurrentSeverity(null);
     setCurrentExplanation(null);
     setComparisonData(null);
-    setSubstitutionInfo(null);
     setReplaySnapshots([]);
     setCurrentScrubIndex(0);
     setIsProcessing(true);
