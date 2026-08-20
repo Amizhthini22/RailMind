@@ -4,7 +4,7 @@ import { useMultiLanguageTTS } from '../hooks/useMultiLanguageTTS';
 import { parseMultilingualCommand } from '../services/voiceCommandsMultilang';
 import { getResponse } from '../services/responses';
 
-export const MultiLanguageVoiceControl = ({ onCommand, showToast, substitutionInfo }) => {
+export const MultiLanguageVoiceControl = ({ onCommand, showToast }) => {
   const {
     isListening,
     transcript,
@@ -37,16 +37,6 @@ export const MultiLanguageVoiceControl = ({ onCommand, showToast, substitutionIn
       if (result.params && result.params.time && !result.params.new_time) {
         result.params.new_time = result.params.time;
       }
-
-      if (result.action === 'show_substitution' && substitutionInfo) {
-        result.params = {
-          ...result.params,
-          train_name: substitutionInfo.original_train_name,
-          standby_name: `${substitutionInfo.standby_train_name} (${substitutionInfo.standby_train_number})`,
-          delay: '45',
-          station: substitutionInfo.substitution_station
-        };
-      }
       
       onCommand({ ...result });
       const response = getResponse(result.action, language, result.params);
@@ -72,28 +62,18 @@ export const MultiLanguageVoiceControl = ({ onCommand, showToast, substitutionIn
 
   const QUICK_COMMANDS = {
     'en-US': [
-      { label: '⚡ Substitution', text: 'show substitution' },
       { label: '📊 Metrics', text: 'show metrics' },
       { label: '🔄 Reschedule T1', text: 'reschedule train t1 to 3:45 PM' },
       { label: '⏱️ Delays', text: 'delay status' },
       { label: '🚨 Escalate', text: 'trigger escalation' }
     ],
-    'ta-IN': [
-      { label: '⚡ மாற்று ரயில்', text: 'மாற்று ரயில்' },
-      { label: '📊 மெட்ரிக்ஸ்', text: 'மெட்ரிக்ஸ்' },
-      { label: '🔄 ரயில் t1 மாற்று', text: 't1 நேரம் 3.45 மணிக்கு மாற்று' },
-      { label: '⏱️ தாமதம் நிலை', text: 'தாமதம் நிலை' },
-      { label: '🚨 அறிவிப்பு உயர்த்து', text: 'அறிவிப்பு உயர்த்து' }
-    ],
     'hi-IN': [
-      { label: '⚡ बदली ट्रेन', text: 'बदली ट्रेन' },
       { label: '📊 मेट्रिक्स', text: 'मेट्रिक्स दिखाएं' },
       { label: '🔄 ट्रेन t1 बदलें', text: 'ट्रेन t1 को 3:45 पर बदलें' },
       { label: '⏱️ देरी स्थिति', text: 'देरी की स्थिति' },
       { label: '🚨 विस्तार', text: 'विस्तार ट्रिगर करें' }
     ],
     'ja-JP': [
-      { label: '⚡ 代替列車', text: '代替列車' },
       { label: '📊 メトリクス', text: 'メトリクス表示' },
       { label: '🔄 スケジュール変更', text: 'トレーン t1 を 3:45 に変更' },
       { label: '⏱️ 遅延状況', text: '遅延状況' },

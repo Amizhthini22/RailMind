@@ -2,7 +2,6 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 
 const LANGUAGES = {
   'en-US': { name: 'English', flag: '🇺🇸' },
-  'ta-IN': { name: 'Tamil', flag: '🇮🇳' },
   'hi-IN': { name: 'Hindi', flag: '🇮🇳' },
   'ja-JP': { name: 'Japanese', flag: '🇯🇵' }
 };
@@ -49,7 +48,6 @@ export const useMultiLanguageSpeech = () => {
     };
 
     recognition.onerror = (event) => {
-      // 'aborted' and 'no-speech' are standard browser speech lifecycle events, not system errors
       if (event.error !== 'no-speech' && event.error !== 'aborted') {
         setError(event.error);
       }

@@ -23,17 +23,18 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { MultiLanguageVoiceControl } from './components/MultiLanguageVoiceControl';
+import { Login } from './components/Login';
 
 export default function App() {
+  const [session, setSession] = useState(() => {
+    const stored = sessionStorage.getItem('railmind_session');
+    return stored ? JSON.parse(stored) : null;
+  });
   const [activeTab, setActiveTab] = useState('dashboard');
   const [highlightAgents, setHighlightAgents] = useState(false);
   
   const [trains, setTrains] = useState([]);
   const [stations, setStations] = useState([]);
-  const [standbyTrains, setStandbyTrains] = useState([]);
-  const [substituteTrain, setSubstituteTrain] = useState(false);
-  const [selectedStandbyTrain, setSelectedStandbyTrain] = useState('');
-  const [substitutionInfo, setSubstitutionInfo] = useState(null);
   
   const [selectedTrain, setSelectedTrain] = useState('');
   const [selectedStation, setSelectedStation] = useState('');
@@ -61,7 +62,6 @@ export default function App() {
   const [voicesStatus, setVoicesStatus] = useState({
     en: false,
     hi: false,
-    ta: false,
     ja: false
   });
   const [comparisonData, setComparisonData] = useState(null);
@@ -138,7 +138,6 @@ export default function App() {
       const status = {
         en: voices.some(v => v.lang.toLowerCase().startsWith('en') || v.lang.toLowerCase().includes('en')),
         hi: voices.some(v => v.lang.toLowerCase().startsWith('hi') || v.lang.toLowerCase().includes('hi')),
-        ta: voices.some(v => v.lang.toLowerCase().startsWith('ta') || v.lang.toLowerCase().includes('ta') || v.name.toLowerCase().includes('tamil') || v.lang.toLowerCase().includes('in')),
         ja: voices.some(v => v.lang.toLowerCase().startsWith('ja') || v.lang.toLowerCase().includes('ja'))
       };
       setVoicesStatus(status);
@@ -162,7 +161,6 @@ export default function App() {
       .then(data => {
         setTrains(data.trains);
         setStations(data.stations);
-        if (data.standby_trains) setStandbyTrains(data.standby_trains);
         if (data.trains.length > 0) setSelectedTrain(data.trains[0].id);
         if (data.stations.length > 0) setSelectedStation(data.stations[1].code);
       })
@@ -223,9 +221,6 @@ export default function App() {
         setIsProcessing(false);
       } else if (msg.type === 'comparison') {
         setComparisonData(msg.data);
-      } else if (msg.type === 'substitution') {
-        setSubstitutionInfo(msg.data);
-        showToast('success', 'Relief Train Dispatched', `${msg.data.standby_train_name} (${msg.data.standby_train_number}) dispatched to replace ${msg.data.original_train_name} on schedule.`);
       } else if (msg.type === 'agent_alert') {
         if (msg.data.status === 'crashed') {
           setReschedulerHealth('crashed');
@@ -375,11 +370,6 @@ export default function App() {
           items.push({ text: announcement.text_hi, lang: 'hi-IN', train_name: announcement.train_name });
         }
       }
-      if (latestSettings.current.announcementLang === 'ta' || latestSettings.current.announcementLang === 'all') {
-        if (announcement.text_ta) {
-          items.push({ text: announcement.text_ta, lang: 'ta-IN', train_name: announcement.train_name });
-        }
-      }
       if (latestSettings.current.announcementLang === 'ja' || latestSettings.current.announcementLang === 'all') {
         if (announcement.text_ja) {
           items.push({ text: announcement.text_ja, lang: 'ja-JP', train_name: announcement.train_name });
@@ -402,7 +392,6 @@ export default function App() {
     const mockAnnouncement = {
       text_en: "Attention passengers. Train number 12302, Rajdhani Express, is running late. We regret the inconvenience caused.",
       text_hi: "कृपया ध्यान दें। गाड़ी संख्या 12302, राजधानी एक्सप्रेस, अपने निर्धारित समय से देरी से चल रही है। आपको हुई असुविधा के लिए हमें खेद है।",
-      text_ta: "பயணிகளின் கவனத்திற்கு. வண்டி எண் 12302, ராஜ்தானி எக்ஸ்பிரஸ், தாமதமாக இயங்குகிறது. உங்களுக்கு ஏற்பட்ட அசௌகரியத்திற்கு வருந்துகிறோம்.",
       text_ja: "乗客の皆様にご案内いたします。列車番号 12302、ラージダーニー・エクスプレス は遅れて運行しております。ご不便をおかけして大変申し訳ございません。"
     };
     enqueueAnnouncements([mockAnnouncement]);
@@ -545,9 +534,7 @@ export default function App() {
         train_id: selectedTrain,
         station_code: selectedStation,
         delay_minutes: delayMinutes,
-        reason: reason,
-        substitute_train: substituteTrain,
-        standby_train_id: selectedStandbyTrain || null
+        reason: reason
       })
     });
   };
@@ -737,15 +724,6 @@ export default function App() {
         showToast('info', 'System Status', 'System Operational. Websocket connected. Voice commands active.');
         break;
 
-      case 'show_substitution':
-        setActiveTab('dashboard');
-        if (substitutionInfo) {
-          showToast('success', 'Relief Train Dispatched', `${substitutionInfo.standby_train_name} (${substitutionInfo.standby_train_number}) has replaced ${substitutionInfo.original_train_name} from ${substitutionInfo.substitution_station}.`);
-        } else {
-          showToast('info', 'Standby Relief Fleet', 'Relief rakes stationed on alert at Kanpur Central, New Delhi, and Prayagraj.');
-        }
-        break;
-
       case 'mute':
         setSettings(prev => ({ ...prev, audioEnabled: false }));
         break;
@@ -763,15 +741,26 @@ export default function App() {
     }
   };
 
-  const renderSidebar = () => (
+  const renderSidebar = (onLogout) => (
     <div className="sidebar">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px', padding: '0 10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', padding: '0 10px' }}>
         <div style={{ background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))', padding: '10px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(139, 92, 246, 0.4)' }}>
           <TrainFront size={24} color="white" />
         </div>
         <h1 className="text-gradient" style={{ fontSize: '24px' }}>RailMind</h1>
       </div>
-      
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '10px 12px', marginBottom: '20px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px' }}>
+        <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>{session.name}</span>
+        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{session.role.replace('_', ' ')}</span>
+        <button
+          onClick={onLogout}
+          style={{ marginTop: '8px', background: 'none', border: '1px solid rgba(244, 63, 94, 0.3)', color: 'var(--error)', borderRadius: '6px', padding: '5px 0', fontSize: '11px', cursor: 'pointer' }}
+        >
+          Sign Out
+        </button>
+      </div>
+
       <div 
         className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
         onClick={() => setActiveTab('dashboard')}
@@ -816,7 +805,7 @@ export default function App() {
       </div>
 
       <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        <MultiLanguageVoiceControl onCommand={handleVoiceCommand} showToast={showToast} substitutionInfo={substitutionInfo} />
+        <MultiLanguageVoiceControl onCommand={handleVoiceCommand} showToast={showToast} />
       </div>
     </div>
   );
@@ -1023,39 +1012,6 @@ export default function App() {
             </select>
           </div>
 
-          {/* Standby Relief Train Substitution Option */}
-          <div style={{ marginTop: '2px', padding: '12px', background: substituteTrain ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255,255,255,0.02)', border: substituteTrain ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', transition: 'all 0.2s ease' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: substituteTrain ? 'var(--success)' : 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <TrainFront size={16} /> Substitute with Relief Train
-              </label>
-              <input 
-                type="checkbox" 
-                checked={substituteTrain} 
-                onChange={(e) => setSubstituteTrain(e.target.checked)} 
-                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-              />
-            </div>
-            {substituteTrain && (
-              <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Standby Rake Selection:</label>
-                <select 
-                  value={selectedStandbyTrain} 
-                  onChange={(e) => setSelectedStandbyTrain(e.target.value)}
-                  style={{ fontSize: '12px', padding: '6px 8px' }}
-                >
-                  <option value="">⚡ AI Auto-Assign (Hub Proximity)</option>
-                  {standbyTrains.map(st => (
-                    <option key={st.id} value={st.id}>{st.name} ({st.number}) — Base: {st.current_station}</option>
-                  ))}
-                </select>
-                <span style={{ fontSize: '11px', color: 'rgba(16, 185, 129, 0.9)', fontStyle: 'italic', lineHeight: '1.4' }}>
-                  * Dispatches standby rake to take over timetable slot on schedule, rescuing passengers.
-                </span>
-              </div>
-            )}
-          </div>
-
           <button className="btn-primary" onClick={handleInjectDelay} disabled={isProcessing} style={{ marginTop: '10px' }}>
             {isProcessing ? 'Processing...' : 'Trigger Simulation'}
           </button>
@@ -1138,20 +1094,6 @@ export default function App() {
                 {Object.keys(reschedulePlan).length > 0 ? `${Object.keys(reschedulePlan).length} Trains Rescheduled` : 'All Trains On Time'}
               </span>
             </div>
-            
-            {substitutionInfo && (
-              <div className="glass-panel animate-slide-in" style={{ padding: '14px 18px', marginBottom: '14px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <TrainFront size={22} color="var(--success)" />
-                <div>
-                  <div style={{ fontWeight: '700', color: 'var(--success)', fontSize: '14px' }}>
-                    ⚡ Train Substituted: {substitutionInfo.standby_train_name} ({substitutionInfo.standby_train_number})
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    Dispatched from {substitutionInfo.substitution_station} to replace {substitutionInfo.original_train_name} ({substitutionInfo.original_train_number}). Downstream passengers on time!
-                  </div>
-                </div>
-              </div>
-            )}
             
             {trains.map(t => {
               const isAffected = reschedulePlan[t.id];
@@ -1584,9 +1526,6 @@ export default function App() {
             <div className="announcement-script-row">
               <span className="lang-badge hi">hi</span> {ann.text_hi}
             </div>
-            <div className="announcement-script-row">
-              <span className="lang-badge ta">ta</span> {ann.text_ta}
-            </div>
             {ann.text_ja && (
               <div className="announcement-script-row">
                 <span className="lang-badge ja">ja</span> {ann.text_ja}
@@ -1632,9 +1571,8 @@ export default function App() {
             >
               <option value="en">English (India)</option>
               <option value="hi">Hindi (हिंदी)</option>
-              <option value="ta">Tamil (தமிழ்)</option>
               <option value="ja">Japanese (日本語)</option>
-              <option value="all">Play All (English + Hindi + Tamil + Japanese)</option>
+              <option value="all">Play All (English + Hindi + Japanese)</option>
             </select>
           </div>
 
@@ -1654,21 +1592,15 @@ export default function App() {
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span>Tamil (ta)</span>
-                <span style={{ color: voicesStatus.ta ? 'var(--success)' : 'var(--error)', fontWeight: '600' }}>
-                  {voicesStatus.ta ? '✓ Detected' : '✗ Missing'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                 <span>Japanese (ja)</span>
                 <span style={{ color: voicesStatus.ja ? 'var(--success)' : 'var(--error)', fontWeight: '600' }}>
                   {voicesStatus.ja ? '✓ Detected' : '✗ Missing'}
                 </span>
               </div>
             </div>
-            {(!voicesStatus.ta || !voicesStatus.ja) && (
+            {!voicesStatus.ja && (
               <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--warning)', lineHeight: '1.4', background: 'rgba(245, 158, 11, 0.1)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-                <strong>Note:</strong> Some languages are missing in your browser/OS. Chrome will download them if connected to the internet, or you can add them in OS speech settings.
+                <strong>Note:</strong> Japanese voice may be missing in your browser/OS. Chrome will download it if connected to the internet, or you can add it in OS speech settings.
               </div>
             )}
           </div>
@@ -1723,9 +1655,31 @@ export default function App() {
     </div>
   );
 
+  if (!session) {
+    return (
+      <Login onLogin={(data) => {
+        sessionStorage.setItem('railmind_session', JSON.stringify(data));
+        setSession(data);
+      }} />
+    );
+  }
+
+  const handleLogout = async () => {
+    try {
+      await fetch('http://localhost:8001/api/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+    sessionStorage.removeItem('railmind_session');
+    setSession(null);
+  };
+
   return (
     <div className="app-container">
-      {renderSidebar()}
+      {renderSidebar(handleLogout)}
       
       <div className="main-content">
         {activeTab === 'dashboard' && renderDashboard()}

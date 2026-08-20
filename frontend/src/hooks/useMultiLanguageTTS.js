@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 
 const VOICE_CONFIGS = {
   'en-US': { lang: 'en-US', rate: 0.95, pitch: 1.0 },
-  'ta-IN': { lang: 'ta-IN', rate: 0.9, pitch: 1.0 },
   'hi-IN': { lang: 'hi-IN', rate: 0.9, pitch: 1.0 },
   'ja-JP': { lang: 'ja-JP', rate: 0.85, pitch: 1.0 }
 };
@@ -17,7 +16,6 @@ export const useMultiLanguageTTS = () => {
       return;
     }
 
-    // Chrome unpause safety check
     if (synth.paused) {
       synth.resume();
     }
@@ -30,13 +28,11 @@ export const useMultiLanguageTTS = () => {
     utterance.pitch = config.pitch;
     utterance.volume = 1.0;
 
-    // Search for matching language voice (e.g. ta-IN, Google தமிழ், Valluvar)
     const voices = synth.getVoices();
     const matchingVoice = voices.find(v => 
       v.lang.toLowerCase().startsWith(config.lang.toLowerCase()) || 
       v.lang.toLowerCase().includes(config.lang.split('-')[0].toLowerCase()) ||
-      v.name.toLowerCase().includes(config.lang.toLowerCase()) ||
-      (language === 'ta-IN' && (v.name.toLowerCase().includes('tamil') || v.name.toLowerCase().includes('valluvar')))
+      v.name.toLowerCase().includes(config.lang.toLowerCase())
     );
 
     if (matchingVoice) {
