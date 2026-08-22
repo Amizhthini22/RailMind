@@ -12,6 +12,10 @@ from routes.auth import auth_router
 from routes.voice import voice_router
 from routes.notify import notify_router, set_notify_broadcast_callback
 from voice.confirmation import confirmation_gate
+from digital_twin.corridor import PHYSICAL_CORRIDOR
+from digital_twin.simulator import PHYSICS_SIMULATOR
+from rl_rescheduler.agent import RL_RESCHEDULER
+from rl_rescheduler.benchmark import run_head_to_head_benchmark
 
 app = FastAPI(title="RailMind MVP API")
 
@@ -120,6 +124,37 @@ async def generate_announcement(event: DelayEvent):
         "incident_explanation": result.get("incident_explanation"),
         "announcements": announcements
     }
+
+@app.get("/api/digital-twin/platforms")
+async def get_digital_twin_platforms():
+    return PHYSICAL_CORRIDOR.get_all_platforms_state()
+
+@app.get("/api/rl/training-history")
+async def get_rl_training_history():
+    return {
+        "history": RL_RESCHEDULER.training_history,
+        "total_episodes": RL_RESCHEDULER.total_episodes_trained,
+        "q_states_count": len(RL_RESCHEDULER.q_table),
+        "epsilon": RL_RESCHEDULER.epsilon
+    }
+
+class RLTrainRequest(BaseModel):
+    episodes: int = 50
+
+@app.post("/api/rl/train-step")
+async def post_rl_train_step(req: RLTrainRequest):
+    RL_RESCHEDULER.pre_train(episodes=req.episodes)
+    return {
+        "status": "success",
+        "episodes_trained": req.episodes,
+        "total_episodes": RL_RESCHEDULER.total_episodes_trained,
+        "history": RL_RESCHEDULER.training_history[-10:]
+    }
+
+@app.post("/api/rl/benchmark")
+async def post_rl_benchmark(event: DelayEvent):
+    benchmark_res = run_head_to_head_benchmark(event.dict())
+    return benchmark_res
 
 class AgentFailureRequest(BaseModel):
     agent: str = "rescheduler"
@@ -272,6 +307,24 @@ async def run_agents(event: DelayEvent):
                 await manager.broadcast(json.dumps({
                     "type": "substitution",
                     "data": state_update["substitution_info"]
+                }))
+                
+            if "rl_benchmark_data" in state_update:
+                await manager.broadcast(json.dumps({
+                    "type": "rl_benchmark",
+                    "data": state_update["rl_benchmark_data"]
+                }))
+
+            if "platform_allocations" in state_update:
+                await manager.broadcast(json.dumps({
+                    "type": "platform_allocations",
+                    "data": state_update["platform_allocations"]
+                }))
+
+            if "space_time_trajectories" in state_update:
+                await manager.broadcast(json.dumps({
+                    "type": "space_time",
+                    "data": state_update["space_time_trajectories"]
                 }))
         
         await asyncio.sleep(0.5) # Slight pause to make the UI look like agents are "thinking"
