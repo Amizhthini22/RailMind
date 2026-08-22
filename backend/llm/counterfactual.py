@@ -19,10 +19,11 @@ def _compute_action_cost(strategy_type: str, delay_event: Any, train: Any, affec
     """
     try:
         # Attempt to import cost_optimizer if defined by Member A
-        import cost_optimizer
+        import importlib
+        cost_optimizer = importlib.import_module("cost_optimizer")
         if hasattr(cost_optimizer, "score_action"):
             return int(cost_optimizer.score_action(strategy_type, delay_event, train, affected_trains))
-    except ImportError:
+    except (ImportError, ModuleNotFoundError):
         pass
 
     try:
