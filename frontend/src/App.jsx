@@ -33,7 +33,10 @@ import {
   Eye,
   Award,
   TrendingUp,
-  Compass
+  Compass,
+  Mic,
+  MicOff,
+  Sparkles
 } from 'lucide-react';
 import { MultiLanguageVoiceControl } from './components/MultiLanguageVoiceControl';
 import { Login } from './components/Login';
@@ -841,6 +844,13 @@ export default function App() {
       >
         <History size={20} />
         Incident History
+      </div>
+      <div 
+        className={`nav-item ${activeTab === 'voice' ? 'active' : ''}`}
+        onClick={() => setActiveTab('voice')}
+      >
+        <Mic size={20} />
+        Voice Command Center
       </div>
       <div 
         className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
@@ -2215,6 +2225,33 @@ export default function App() {
     </div>
   );
 
+  const renderVoiceCommandCenter = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '10px 0', width: '100%', flex: 1 }}>
+      {/* Top Banner */}
+      <div className="glass-panel" style={{ padding: '24px', background: 'linear-gradient(180deg, rgba(139, 92, 246, 0.12) 0%, rgba(18, 22, 38, 0.95) 100%)', borderRadius: '16px', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h1 className="text-gradient" style={{ fontSize: '26px', margin: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Mic size={28} color="var(--accent-secondary)" /> Multilingual Voice Command Studio
+            </h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '6px', margin: 0 }}>
+              Hands-free natural speech commands for Indian Railways OCC Controllers in English (en-US), Hindi (hi-IN), and Japanese (ja-JP).
+            </p>
+          </div>
+
+          <span className="citation-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success)', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+            🎙️ Web Speech API & Neural TTS Ready
+          </span>
+        </div>
+      </div>
+
+      {/* Voice Control Interactive Panel */}
+      <div className="glass-panel" style={{ padding: '28px', borderRadius: '16px', border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+        <MultiLanguageVoiceControl onCommand={handleVoiceCommand} showToast={showToast} />
+      </div>
+    </div>
+  );
+
   if (!session) {
     return (
       <Login onLogin={(data) => {
@@ -2276,6 +2313,7 @@ export default function App() {
             />
           </div>
         )}
+        {activeTab === 'voice' && renderVoiceCommandCenter()}
         {activeTab === 'replay' && renderSessionReplay()}
         {activeTab === 'announcements' && renderAnnouncements()}
         {activeTab === 'settings' && renderSettings()}
@@ -2312,6 +2350,18 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* Floating Quick Voice Command Button */}
+      {activeTab !== 'voice' && (
+        <button 
+          className="floating-voice-pill"
+          onClick={() => setActiveTab('voice')}
+          title="Open Multilingual Voice Command Center"
+        >
+          <Mic size={18} />
+          <span>Voice Commands</span>
+        </button>
+      )}
 
       {/* Toast Notifications */}
       <div className="toast-container">
