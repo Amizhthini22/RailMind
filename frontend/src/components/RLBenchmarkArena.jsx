@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, AlertTriangle, Play, RefreshCw, Zap, Activity, Award, TrendingUp, CheckCircle2 } from 'lucide-react';
+import { apiFetch } from '../config/api';
 
 export const RLBenchmarkArena = ({ 
   benchmarkData = null, 
@@ -13,7 +14,7 @@ export const RLBenchmarkArena = ({
 
   const fetchTrainingHistory = async () => {
     try {
-      const res = await fetch('http://localhost:8001/api/rl/training-history');
+      const res = await apiFetch('/api/rl/training-history');
       const data = await res.json();
       setTrainingHistory(data.history || []);
       setTotalEpisodes(data.total_episodes || 600);
@@ -30,7 +31,7 @@ export const RLBenchmarkArena = ({
   const handleTrainStep = async () => {
     setIsTraining(true);
     try {
-      const res = await fetch('http://localhost:8001/api/rl/train-step', {
+      const res = await apiFetch('/api/rl/train-step', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ episodes: 50 })

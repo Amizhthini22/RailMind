@@ -16,6 +16,12 @@ ACTIVE_SESSIONS: Dict[str, Dict[str, Any]] = {}
 
 # Demo user credentials & assigned role mappings
 VALID_USERS = {
+    "admin": {
+        "password": "admin123",
+        "name": "System Administrator",
+        "role": "controller",
+        "permissions": ["reschedule", "escalate", "substitute", "voice_command", "view"]
+    },
     "controller": {
         "password": "controller123",
         "name": "Chief Operations Controller (NDLS Control)",

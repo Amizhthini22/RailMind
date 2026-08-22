@@ -43,6 +43,7 @@ import { Login } from './components/Login';
 import { DigitalTwinOccupancy } from './components/DigitalTwinOccupancy';
 import { SpaceTimeDiagram } from './components/SpaceTimeDiagram';
 import { RLBenchmarkArena } from './components/RLBenchmarkArena';
+import { apiFetch, getWsBaseUrl } from './config/api';
 
 export default function App() {
   const [session, setSession] = useState(() => {
@@ -185,7 +186,7 @@ export default function App() {
   }, [logs]);
 
   useEffect(() => {
-    fetch('http://localhost:8001/api/initial-state')
+    apiFetch('/api/initial-state')
       .then(res => res.json())
       .then(data => {
         setTrains(data.trains);
@@ -195,12 +196,12 @@ export default function App() {
       })
       .catch(err => console.error("Error loading initial state:", err));
 
-    fetch('http://localhost:8001/api/announcements')
+    apiFetch('/api/announcements')
       .then(res => res.json())
       .then(data => setAnnouncementsLog(data))
       .catch(err => console.error("Error fetching announcements:", err));
 
-    const ws = new WebSocket('ws://localhost:8001/ws');
+    const ws = new WebSocket(getWsBaseUrl());
     
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -434,7 +435,7 @@ export default function App() {
 
   const handleClearAnnouncements = async () => {
     try {
-      await fetch('http://localhost:8001/api/clear-announcements', { method: 'POST' });
+      await apiFetch('/api/clear-announcements', { method: 'POST' });
       setAnnouncementsLog([]);
       showToast("success", "Logs Cleared", "Successfully cleared all announcement audit logs.");
     } catch (err) {
@@ -445,7 +446,7 @@ export default function App() {
 
   const handleKillRescheduler = async () => {
     try {
-      await fetch('http://localhost:8001/api/fail-agent', {
+      await apiFetch('/api/fail-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agent: 'rescheduler' })
@@ -457,7 +458,7 @@ export default function App() {
 
   const handleHealRescheduler = async () => {
     try {
-      await fetch('http://localhost:8001/api/heal-agent', {
+      await apiFetch('/api/heal-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agent: 'rescheduler' })
@@ -531,7 +532,7 @@ export default function App() {
   const handleVerifyAuditChain = async () => {
     setIsVerifyingChain(true);
     try {
-      const res = await fetch('http://127.0.0.1:8001/api/verify-audit-chain');
+      const res = await apiFetch('/api/verify-audit-chain');
       const data = await res.json();
       setAuditVerification(data);
       if (data.is_valid) {
@@ -561,7 +562,7 @@ export default function App() {
     setIsProcessing(true);
     setActiveDelayStation(selectedStation);
     
-    await fetch('http://localhost:8001/api/inject-delay', {
+    await apiFetch('/api/inject-delay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -646,7 +647,7 @@ export default function App() {
         setActiveDelayStation(stationCode);
 
         try {
-          await fetch('http://localhost:8001/api/inject-delay', {
+          await apiFetch('/api/inject-delay', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -705,7 +706,7 @@ export default function App() {
         setActiveDelayStation(stationCode);
 
         try {
-          await fetch('http://localhost:8001/api/inject-delay', {
+          await apiFetch('/api/inject-delay', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2263,7 +2264,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await fetch('http://localhost:8001/api/logout', {
+      await apiFetch('/api/logout', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });

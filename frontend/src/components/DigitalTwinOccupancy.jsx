@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layers, ShieldCheck, AlertTriangle, TrainFront, Zap, Clock, Activity, CheckCircle2 } from 'lucide-react';
+import { apiFetch } from '../config/api';
 
 export const DigitalTwinOccupancy = ({ 
   stations = [], 
@@ -15,7 +16,7 @@ export const DigitalTwinOccupancy = ({
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    fetch('http://localhost:8001/api/digital-twin/platforms')
+    apiFetch('/api/digital-twin/platforms')
       .then(res => res.json())
       .then(data => setPlatformsState(data))
       .catch(err => console.error("Error fetching platforms:", err));
